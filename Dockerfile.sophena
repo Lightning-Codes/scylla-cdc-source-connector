@@ -1,0 +1,13 @@
+FROM confluentinc/cp-kafka-connect:8.1.1@sha256:27eb1b70d62fba0188f1a1ee87bd77011eb8db2efd489b61a23b4beec1e44371
+
+LABEL org.opencontainers.image.source="https://github.com/Lightning-Codes/scylla-cdc-source-connector" \
+      org.opencontainers.image.version="2.0.5-sophena.1" \
+      org.opencontainers.image.description="ScyllaDB CDC connector with strict TLS endpoint verification"
+
+USER root
+
+RUN rm -rf /usr/share/confluent-hub-components/scylla-cdc-source-connector
+COPY --chown=appuser:appuser dist/ \
+  /usr/share/confluent-hub-components/scylla-cdc-source-connector/
+
+USER appuser

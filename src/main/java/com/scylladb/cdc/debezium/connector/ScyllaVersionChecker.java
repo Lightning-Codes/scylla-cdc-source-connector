@@ -2,7 +2,6 @@ package com.scylladb.cdc.debezium.connector;
 
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.Host;
-import com.datastax.driver.core.RemoteEndpointAwareNettySSLOptions;
 import com.datastax.driver.core.SSLOptions;
 import com.datastax.driver.core.policies.DCAwareRoundRobinPolicy;
 import io.netty.handler.ssl.SslContext;
@@ -95,8 +94,7 @@ public class ScyllaVersionChecker {
     return buildNettySslOptions(sslProvider);
   }
 
-  private RemoteEndpointAwareNettySSLOptions buildNettySslOptions(SslProvider provider)
-      throws Exception {
+  private SSLOptions buildNettySslOptions(SslProvider provider) throws Exception {
     SslContextBuilder contextBuilder = SslContextBuilder.forClient().sslProvider(provider);
 
     if (config.getTrustStorePath() != null) {
@@ -129,7 +127,7 @@ public class ScyllaVersionChecker {
               new BufferedInputStream(new FileInputStream(config.getPrivateKeyPath()))) {
         contextBuilder.keyManager(certInputStream, privateKeyInputStream);
         SslContext sslContext = contextBuilder.build();
-        return new RemoteEndpointAwareNettySSLOptions(sslContext);
+        return new StrictRemoteEndpointAwareNettySSLOptions(sslContext);
       }
     } else if ((config.getCertPath() == null) != (config.getPrivateKeyPath() == null)) {
       throw new RuntimeException(
@@ -143,7 +141,7 @@ public class ScyllaVersionChecker {
     }
 
     SslContext sslContext = contextBuilder.build();
-    return new RemoteEndpointAwareNettySSLOptions(sslContext);
+    return new StrictRemoteEndpointAwareNettySSLOptions(sslContext);
   }
 
   private KeyStore createKeyStore(String path, String password) throws Exception {

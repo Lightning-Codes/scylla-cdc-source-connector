@@ -1,5 +1,12 @@
 # Scylla CDC Source Connector
 
+> [!IMPORTANT]
+> `2.0.5-sophena.1` is a Lightning Codes security-maintained fork of upstream ScyllaDB
+> `v2.0.5`. It adds mandatory TLS endpoint verification and quoted Alternator identifier
+> support for Sophena. It is not an official ScyllaDB-supported release. Production images are
+> built only by the provenance-producing `Sophena connector image` workflow and must be deployed
+> by OCI digest.
+
 ## Overview
 
 Scylla CDC Source Connector is a source connector capturing row-level changes in the tables of a Scylla cluster. It is a Debezium connector, compatible with Kafka Connect (with Kafka 2.6.0+) and built on top of scylla-cdc-java library.
@@ -41,6 +48,7 @@ Below is a summary of the Debezium and Kafka (Connect API) dependency versions u
 
 | Connector version | Debezium version    | Connect API |
 |-------------------|---------------------|-------------|
+| 2.0.5-sophena.1   | 2.7.4.Final         | 8.1.1-ccs   |
 | v2.0.3            | 2.7.4.Final         | 8.1.1-ccs   |
 | v2.0.2            | 2.7.4.Final         | 8.1.1-ccs   |
 | v2.0.1            | 2.7.4.Final         | 8.1.1-ccs   |
@@ -1081,6 +1089,12 @@ In addition to the configuration parameters described in the ["Configuration"](#
 ### SSL Configuration
 
 The connector supports SSL/TLS connections to Scylla. The following properties configure SSL:
+
+When SSL is enabled, the connector always verifies the certificate identity of every initial
+contact point and every topology-discovered node against its DNS or IP subject alternative name.
+This verification is fail-closed and cannot be disabled. The truststore must therefore contain
+only the intended ScyllaDB serving CA, and each advertised node address must be present in its
+serving certificate.
 
 | Property                         | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 |----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

@@ -10,6 +10,8 @@ import com.scylladb.cdc.model.VNodeId;
 import io.debezium.config.Configuration;
 import io.debezium.config.Field;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
@@ -24,7 +26,6 @@ import org.apache.commons.lang3.tuple.Pair;
 public class ConfigSerializerUtil {
   private static final Pattern COMMA_WITH_WHITESPACE = Pattern.compile("\\s*,\\s*");
   private static final Pattern PORT_DELIMITER = Pattern.compile(":");
-  private static final Pattern KEYSPACE_TABLE_DELIMITER = Pattern.compile("\\.");
   private static final Pattern UNQUOTED_NAME = Pattern.compile("[a-zA-Z_0-9]{1,48}");
 
   private static final String FIELD_DELIMITER = ";";
@@ -141,15 +142,8 @@ public class ConfigSerializerUtil {
    * Deserializes a list of table names, provided as a comma-separated list of <keyspace name>.<table name>.
    */
   public static Set<TableName> deserializeTableNames(String serialized) {
-    String[] tables = COMMA_WITH_WHITESPACE.split(serialized);
-
-    return Arrays.stream(tables)
-        .map(
-            t -> {
-              String[] keyspaceAndName = KEYSPACE_TABLE_DELIMITER.split(t);
-
-              return new TableName(keyspaceAndName[0], keyspaceAndName[1]);
-            })
+    return splitOutsideQuotedIdentifiers(serialized, ',').stream()
+        .map(ConfigSerializerUtil::parseQualifiedTableName)
         .collect(Collectors.toSet());
   }
 
@@ -162,40 +156,106 @@ public class ConfigSerializerUtil {
       return 1;
     }
 
-    String[] splitTableNames = COMMA_WITH_WHITESPACE.split(tableNames);
+    List<String> splitTableNames;
+    try {
+      splitTableNames = splitOutsideQuotedIdentifiers(tableNames, ',');
+    } catch (IllegalArgumentException e) {
+      problems.accept(field, tableNames, e.getMessage());
+      return 1;
+    }
 
     int count = 0;
     for (String tableName : splitTableNames) {
-      String[] keyspaceAndName = KEYSPACE_TABLE_DELIMITER.split(tableName);
-
-      // Keyspace and table name limitations from here:
-      // https://docs.scylladb.com/getting-started/ddl/#common-definitions
-      //
-      // TODO: Support quoted table names.
-
-      if (keyspaceAndName.length != 2) {
+      try {
+        parseQualifiedTableName(tableName);
+      } catch (IllegalArgumentException e) {
         problems.accept(
             field,
             tableName,
-            "Expected a comma-separated list of pairs <keyspace name>.<table name>, but got invalid: "
-                + tableName);
+            "Expected a comma-separated list of qualified CQL table names, but got invalid: "
+                + tableName
+                + " ("
+                + e.getMessage()
+                + ")");
         count++;
-        continue;
-      }
-
-      String keyspace = keyspaceAndName[0], table = keyspaceAndName[1];
-      if (!UNQUOTED_NAME.matcher(keyspace).matches()) {
-        count++;
-        problems.accept(
-            field, tableName, "Got invalid keyspace name in table specification: " + keyspace);
-      }
-      if (!UNQUOTED_NAME.matcher(table).matches()) {
-        count++;
-        problems.accept(
-            field, tableName, "Got invalid table name in table specification : " + table);
       }
     }
     return count;
+  }
+
+  private static TableName parseQualifiedTableName(String serialized) {
+    List<String> identifiers = splitOutsideQuotedIdentifiers(serialized, '.');
+    if (identifiers.size() != 2) {
+      throw new IllegalArgumentException("expected exactly one unquoted '.' delimiter");
+    }
+    return new TableName(
+        parseCqlIdentifier(identifiers.get(0)), parseCqlIdentifier(identifiers.get(1)));
+  }
+
+  private static String parseCqlIdentifier(String serialized) {
+    String identifier = serialized.trim();
+    if (UNQUOTED_NAME.matcher(identifier).matches()) {
+      return identifier;
+    }
+    if (identifier.length() < 2
+        || identifier.charAt(0) != '"'
+        || identifier.charAt(identifier.length() - 1) != '"') {
+      throw new IllegalArgumentException("invalid CQL identifier " + identifier);
+    }
+
+    StringBuilder unquoted = new StringBuilder(identifier.length() - 2);
+    for (int i = 1; i < identifier.length() - 1; i++) {
+      char ch = identifier.charAt(i);
+      if (ch != '"') {
+        unquoted.append(ch);
+        continue;
+      }
+      if (i + 1 >= identifier.length() - 1 || identifier.charAt(i + 1) != '"') {
+        throw new IllegalArgumentException("unescaped quote in CQL identifier " + identifier);
+      }
+      unquoted.append('"');
+      i++;
+    }
+    if (unquoted.length() == 0) {
+      throw new IllegalArgumentException("quoted CQL identifiers cannot be empty");
+    }
+    String parsed = unquoted.toString();
+    if (parsed.getBytes(StandardCharsets.UTF_8).length > 48) {
+      throw new IllegalArgumentException("CQL identifiers cannot exceed 48 UTF-8 bytes");
+    }
+    if (parsed.indexOf(FIELD_DELIMITER) >= 0 || parsed.chars().anyMatch(Character::isISOControl)) {
+      throw new IllegalArgumentException(
+          "CQL identifier contains characters that cannot be serialized into connector tasks");
+    }
+    return parsed;
+  }
+
+  private static List<String> splitOutsideQuotedIdentifiers(String serialized, char delimiter) {
+    List<String> parts = new ArrayList<>();
+    StringBuilder current = new StringBuilder(serialized.length());
+    boolean quoted = false;
+    for (int i = 0; i < serialized.length(); i++) {
+      char ch = serialized.charAt(i);
+      if (ch == '"') {
+        current.append(ch);
+        if (quoted && i + 1 < serialized.length() && serialized.charAt(i + 1) == '"') {
+          current.append('"');
+          i++;
+        } else {
+          quoted = !quoted;
+        }
+      } else if (ch == delimiter && !quoted) {
+        parts.add(current.toString().trim());
+        current.setLength(0);
+      } else {
+        current.append(ch);
+      }
+    }
+    if (quoted) {
+      throw new IllegalArgumentException("unterminated quoted CQL identifier");
+    }
+    parts.add(current.toString().trim());
+    return parts;
   }
 
   /**
