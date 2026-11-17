@@ -275,6 +275,12 @@ public class ScyllaChangeRecordEmitterLegacy
       return null;
     }
 
+    // Legacy emits top-level columns only, whose driver values are exact arrays today. Copy the
+    // remaining bytes anyway so a view can never leak its backing array (see BlobBytes).
+    if (dataType.getCqlType() == ChangeSchema.CqlType.BLOB) {
+      return BlobBytes.toConnectValue(cell.getAsObject());
+    }
+
     if (dataType.getCqlType() == ChangeSchema.CqlType.DECIMAL) {
       return cell.getDecimal().toString();
     }

@@ -633,6 +633,12 @@ public class ScyllaChangeRecordEmitter
       return null;
     }
 
+    // Every image value, at any nesting depth, passes through here. A nested blob is a view into
+    // the whole serialized cell, so hand Connect only its own bytes (see BlobBytes).
+    if (dataType.getCqlType() == ChangeSchema.CqlType.BLOB) {
+      return BlobBytes.toConnectValue(field.getAsObject());
+    }
+
     if (dataType.getCqlType() == ChangeSchema.CqlType.DECIMAL) {
       return field.getDecimal().toString();
     }
