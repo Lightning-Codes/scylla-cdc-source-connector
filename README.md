@@ -1,9 +1,10 @@
 # Scylla CDC Source Connector
 
 > [!IMPORTANT]
-> `2.0.5-sophena.2` is a Lightning Codes security-maintained fork of upstream ScyllaDB
+> `2.0.5-sophena.3` is a Lightning Codes security-maintained fork of upstream ScyllaDB
 > `v2.0.5`. It adds mandatory TLS endpoint verification and quoted Alternator identifier
-> support for Sophena. It is not an official ScyllaDB-supported release. Production images are
+> support for Sophena, and builds on CDC Java `1.3.12-sophena.2`, which emits ScyllaDB's own
+> deletes (Alternator TTL expiry, `cdc$operation` -3 / -4) as ordinary deletes. It is not an official ScyllaDB-supported release. Production images are
 > built only by the provenance-producing `Sophena connector image` workflow and must be deployed
 > by OCI digest.
 
@@ -48,6 +49,7 @@ Below is a summary of the Debezium and Kafka (Connect API) dependency versions u
 
 | Connector version | Debezium version    | Connect API |
 |-------------------|---------------------|-------------|
+| 2.0.5-sophena.3   | 2.7.4.Final         | 8.1.1-ccs   |
 | 2.0.5-sophena.2   | 2.7.4.Final         | 8.1.1-ccs   |
 | v2.0.3            | 2.7.4.Final         | 8.1.1-ccs   |
 | v2.0.2            | 2.7.4.Final         | 8.1.1-ccs   |
